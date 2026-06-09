@@ -72,3 +72,10 @@ Invoke-RestMethod -Uri http://127.0.0.1:5000/inject `
 * Kubernetes integration
 * Alerting system
 * Persistent storage
+
+## 📸 Output Screenshot
+
+![Fault_injection Output](assets/output1.png)
+![Fault_injection Output](assets/output2.png)
+![Fault_injection Output](assets/output3.png)
+![Fault_injection Output](assets/output4.png)
