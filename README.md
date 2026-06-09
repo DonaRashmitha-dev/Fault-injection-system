@@ -1,81 +1,129 @@
-# Fault Injection & Self-Healing System
+# Fault Injection System
 
-## 📌 Overview
+A real-time fault injection and monitoring dashboard built with Python and Flask. Inject faults into a running system process, watch live metrics, track recovery time, and export history — all from a browser UI.
 
-This project simulates real-world system failures such as crashes, latency, and memory spikes, and demonstrates automatic recovery using a supervisor-based architecture.
+---
 
-## 🚀 Features
+## Features
 
-* Fault Injection (Crash, Delay, Memory)
-* Self-Healing System (Auto Restart)
-* REST API for fault control
-* Real-time Monitoring (CPU & Memory)
-* Live Dashboard Visualization
-* Logging & Metrics Tracking
+- **Live Metrics** — CPU, memory, crash count, recovery count, and MTTR updated every second
+- **Fault Injection** — Manually trigger crash, delay, memory spike, or random faults
+- **MTTR Tracking** — Automatically measures Mean Time To Recovery after each crash
+- **Fault Scheduling** — Auto-inject faults on a timer (e.g. crash every 30s)
+- **Event History** — Log of every injected fault with timestamps and outcomes
+- **Export CSV** — Download full fault history as a `.csv` file
+- **Process Supervision** — Crashed processes are automatically detected and restarted
 
-## 🏗️ Architecture
+---
 
-* Target System: Simulates workload
-* Fault Injector: Injects failures
-* Supervisor: Detects and restarts system
-* API: External control using Flask
-* Monitor: Tracks system resources
-* Dashboard: Visualizes metrics
+## Tech Stack
 
-## ⚙️ Installation
+- **Backend** — Python, Flask, Flask-CORS
+- **Frontend** — Vanilla HTML/CSS/JS (single file, no framework)
+- **Process Management** — `multiprocessing`, `threading`
+- **Monitoring** — `psutil`
 
-```bash
-pip install -r requirements.txt
+---
+
+## Project Structure
+
+```
+fault_injection_final/
+├── main.py              # Entry point — starts all threads and processes
+├── api.py               # Flask REST API
+├── supervisor.py        # Watches the target process, restarts on crash, tracks MTTR
+├── fault_injector.py    # Applies the active fault to the target process
+├── monitor.py           # Polls CPU and memory via psutil
+├── metrics.py           # Shared metrics state (crashes, recoveries, history)
+├── logger.py            # Event logging
+├── target_system.py     # The system being monitored/injected
+└── static/
+    └── index.html       # Dashboard UI
 ```
 
-## ▶️ Run
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.8+
+- pip
+
+### Install dependencies
+
+```bash
+pip install flask flask-cors psutil
+```
+
+### Run
 
 ```bash
 python main.py
 ```
 
-## 🌐 API Usage
-
-Check status:
+Then open your browser at:
 
 ```
-http://127.0.0.1:5000/status
+http://127.0.0.1:5000
 ```
 
-Inject fault:
+---
 
-```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:5000/inject `
--Method POST `
--Headers @{"Content-Type"="application/json"} `
--Body '{"fault":"crash"}'
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Dashboard UI |
+| GET | `/metrics` | Current CPU, memory, crash/recovery counts |
+| POST | `/inject` | Inject a fault `{ "fault": "crash" }` |
+| GET | `/history` | Full event history |
+| POST | `/clear-history` | Clear event history |
+| GET | `/status` | Process status + MTTR data |
+| POST | `/schedule` | Start/stop fault scheduler |
+| GET | `/schedule/status` | Current scheduler state |
+
+### Fault types
+
+`crash` · `delay` · `memory` · `random` · `none`
+
+---
+
+## Fault Scheduling
+
+Use the scheduling panel on the dashboard to auto-inject faults at a fixed interval.
+
+- Pick a fault type
+- Set interval in seconds (minimum 5s)
+- Hit **START** — the scheduler fires in the background
+- Hit **STOP** to cancel
+
+Useful for demos and stress testing.
+
+---
+
+## MTTR
+
+Mean Time To Recovery is measured automatically. When the supervisor detects a crash, it records the timestamp, restarts the process, then records the recovery timestamp. The difference is shown on the dashboard as **MTTR (last recovery in seconds)**.
+
+---
+
+## Export
+
+Click **export csv** next to the history table to download `fault_history.csv` with columns:
+
+```
+timestamp, fault_type, outcome
 ```
 
-## 📊 Metrics
+---
 
-* total_faults
-* crashes
-* recoveries
+## Screenshots
 
-## 🧠 Concepts Used
+![Dashboard](assets/dashboard.png)
 
-* Multiprocessing
-* Multithreading
-* Fault Tolerance
-* System Monitoring
-* API Design
-* Observability
+---
 
-## 🔮 Future Improvements
+## License
 
-* Distributed system support
-* Kubernetes integration
-* Alerting system
-* Persistent storage
-
-## 📸 Output Screenshot
-
-![Fault_injection Output](assets/output1.png)
-![Fault_injection Output](assets/output2.png)
-![Fault_injection Output](assets/output3.png)
-![Fault_injection Output](assets/output4.png)
+MIT
