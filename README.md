@@ -1,172 +1,152 @@
-# LOG.INTEL — Real-Time Log Intelligence Platform
+﻿# ⚡ Fault Injection & Self-Healing System
 
-> Ingest system logs → detect anomalies statistically → query everything in plain English via RAG-powered AI agent.
+A production-grade chaos engineering platform built in Python. Injects real failures into a running process — crashes, memory spikes, CPU floods, disk I/O storms, network exhaustion — then measures how fast the system recovers. The same pattern powers Netflix Chaos Monkey and Google's DiRT testing framework.
 
----
+> **Why this exists:** Most developers never intentionally break their systems. They wait for production to do it for them. This project flips that — controlled failure, measurable recovery, observable behaviour.
 
-## What This Is
-
-A production-grade observability platform built from scratch. It continuously ingests fault-injection logs, runs EWMA-based anomaly detection, embeds log data into a vector database, and exposes a natural language query interface powered by a local LLM with retrieval-augmented generation.
-
-No cloud dependency. No managed services. Fully self-hosted.
+![Dashboard](dashboard%201.png)
+![Event History](dashboard%202.png)
 
 ---
 
-## Screenshots
-
-### Critical Anomaly Detection
-![Critical Anomalies](screenshots/dashboardhtml_1.png)
-
-### System Health Summary
-![System Health](screenshots/dashboardhtml_2.png)
-
-### Error Query — Last 6 Hours
-![Errors Last 6 Hours](screenshots/dashboardhtml_3.png)
-
----
-
-## Architecture
-
-```
-Fault Injector (Flask)
-        │
-        ▼
-Ingestion Service (FastAPI) ──► PostgreSQL + pgvector
-        │                              │
-        ▼                              ▼
-Embedding Worker              EWMA Anomaly Detector
-(nomic-embed-text)                     │
-                                       ▼
-                              Redis Alert Channel
-                                       │
-                                       ▼
-                            Agent API (FastAPI + RAG)
-                                       │
-                                       ▼
-                              Dashboard (Vanilla JS)
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Fault Simulation | Python / Flask |
-| Ingestion API | FastAPI + asyncpg |
-| Database | PostgreSQL 16 + pgvector extension |
-| Cache / Alerts | Redis 7 |
-| Embeddings | Ollama — nomic-embed-text |
-| Anomaly Detection | EWMA (Exponentially Weighted Moving Average) |
-| AI Agent | Ollama — TinyLlama (local LLM) |
-| RAG Pipeline | Vector similarity search → LLM context injection |
-| Dashboard | Vanilla JS, HTML, CSS |
-| Containers | Docker (Postgres + Redis) |
-
----
-
-## Key Features
-
-**Real-time ingestion** — fault simulator generates CPU/memory/crash logs every few seconds; ingestion service writes to Postgres with embeddings via pgvector.
-
-**EWMA anomaly detection** — statistical threshold model detects CPU spikes using exponentially weighted moving averages. Fires CRITICAL alerts to Redis when threshold breached. Adaptive — threshold adjusts to baseline over time.
-
-**RAG query pipeline** — natural language question → embed query → vector similarity search → top-k relevant logs injected as context → LLM generates specific answer with log IDs and timestamps.
-
-**Live dashboard** — real-time metrics (total logs, error rate, anomaly count, latest critical timestamp), filterable log stream (ALL/ERROR/WARN/INFO/DEBUG), AI query panel.
-
----
-
-## Metrics (Live Run)
+## 📊 Real Metrics (live run)
 
 | Metric | Value |
 |---|---|
-| Total logs ingested | 2,735 |
-| Error rate | 75.4% |
-| EWMA anomalies detected | 431 |
-| Latest anomaly | CPU spike 87.6% (threshold 84.3%, σ=18.60) |
+| Total faults injected | 22 |
+| Process crashes | 6 |
+| Auto-recoveries | 6 |
+| Crash survival rate | **100%** |
+| Fault types tested | crash, memory, cpu_spike, disk_flood, network_block, delay |
+| Scheduler interval | 5s (stress test mode) |
+
+6 crashes. 6 recoveries. Zero manual intervention.
 
 ---
 
-## Running Locally
+## 🏗️ Architecture
+                ┌─────────────────┐
+                │   main.py       │  Entry point — spawns all threads + processes
+                └────────┬────────┘
+                         │
+      ┌──────────────────┼──────────────────┐
+      ▼                  ▼                  ▼
+┌───────────────┐  ┌──────────────┐  ┌───────────────┐
+│ supervisor.py │  │ fault_       │  │  monitor.py   │
+│               │  │ injector.py  │  │  (psutil)     │
+│ Watches proc  │  │              │  │               │
+│ RLock restart │  │ 6 fault types│  │ CPU + memory  │
+│ Measures MTTR │  │ Non-blocking │  │ 1s polling    │
+└───────┬───────┘  └──────┬───────┘  └───────┬───────┘
+│                 │                  │
+▼                 ▼                  ▼
+┌───────────────────────────────────────────────────┐
+│              api.py  (Flask REST)                  │
+│  /inject  /metrics  /history  /export  /schedule  │
+│  Auth: X-API-Token header on all write endpoints  │
+└───────────────────────┬───────────────────────────┘
+│
+▼
+┌───────────────────────┐
+│  static/index.html    │
+│  Live dashboard       │
+│  Sparkline charts     │
+│  Scheduler UI         │
+│  CSV export           │
+└───────────────────────┘
 
-### Prerequisites
-- Docker Desktop
-- Python 3.11+
-- Ollama
+---
 
-### Setup
+## 🔧 Fault Types
+
+| Fault | What it does | Duration |
+|---|---|---|
+| `crash` | Terminates the target process | Instant |
+| `delay` | Simulates latency spike (background thread) | 10s |
+| `memory` | Allocates 100MB bytearray | 5s then released |
+| `cpu_spike` | Burns 2 CPU cores at 100% | 8s |
+| `network_block` | Opens 200 sockets, proper SO_LINGER cleanup | 5s |
+| `disk_flood` | Writes 50MB to disk, holds, deletes | 5s |
+| `random` | Picks any of the above randomly | — |
+
+---
+
+## 🐛 Bugs Fixed
+
+### 1. Deadlock — threading.Lock → threading.RLock
+supervisor.py acquired process_lock to check liveness, then tried to acquire it again in the same thread to restart. threading.Lock is not reentrant — guaranteed deadlock on first crash. Fixed with RLock.
+
+### 2. delay fault blocked the API thread
+time.sleep(10) was called directly in the injector, freezing Flask response. Moved to background daemon thread.
+
+### 3. Memory fault was 4MB not a real spike
+Original: list of 500K ints (~4MB). Replaced with bytearray(100 * 1024 * 1024) — actual 100MB visible in charts.
+
+### 4. Socket leak in network_block
+Sockets closed with s.close() only — left in TIME_WAIT, exhausting OS socket table. Fixed with SO_LINGER + shutdown(SHUT_RDWR) before close.
+
+### 5. No authentication on write endpoints
+Any process on local network could inject faults. Added X-API-Token header validation on /inject, /schedule, /clear-history.
+
+### 6. Hardcoded configuration
+Port, host, token, intervals all hardcoded. Moved to .env + config.py via python-dotenv.
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-# 1. Clone
-git clone https://github.com/YOUR_USERNAME/log-intelligence-platform.git
-cd log-intelligence-platform
-
-# 2. Pull Ollama models
-ollama pull nomic-embed-text
-ollama pull tinyllama
-
-# 3. Start Postgres + Redis
-docker compose up -d
-
-# 4. Install dependencies
+git clone https://github.com/DonaRashmitha-dev/Fault-injection-system.git
+cd Fault-injection-system
 pip install -r requirements.txt
-
-# 5. Start all services
-.\start.ps1          # Windows
-# or manually start each service (see below)
+python main.py
 ```
 
-### Manual Start (4 terminals)
+Open `http://localhost:5000` — enter API token from `.env` — inject faults.
 
-```powershell
-# Terminal 1 — Ingestion
-$env:DATABASE_URL="postgresql://loguser:changeme_strong_password@localhost:5432/logdb"
-$env:REDIS_URL="redis://localhost:6379"
-cd services/ingestion
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+### Docker
 
-# Terminal 2 — Agent
-cd services/agent
-uvicorn agent_api:app --host 0.0.0.0 --port 8002 --reload
-
-# Terminal 3 — Dashboard
-python -m http.server 8080
-
-# Terminal 4 — Fault Injector
-cd services/fault_injector
-python app.py
-```
-
-Open http://localhost:8080/dashboard.html
-
----
-
-## Project Structure
-
-```
-log-intelligence-platform/
-├── services/
-│   ├── ingestion/          # FastAPI log ingestion + embedding pipeline
-│   ├── agent/              # RAG agent API (vector search + LLM)
-│   ├── fault_injector/     # Synthetic fault log generator
-│   ├── embedding_worker/   # Async embedding processor
-│   └── ewma_detector/      # Statistical anomaly detection
-├── dashboard.html          # Live monitoring dashboard
-├── start.ps1               # One-command startup script
-└── docker-compose.yml      # Postgres + Redis containers
+```bash
+docker compose up
 ```
 
 ---
 
-## What I Built vs What I Used
+## 🔌 REST API
 
-Built from scratch: ingestion pipeline, EWMA detector, RAG agent, embedding worker, dashboard UI, fault simulator.
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/` | — | Dashboard |
+| GET | `/metrics` | — | Fault counts, MTTR, CPU, memory |
+| GET | `/status` | — | Process alive/dead, current fault |
+| GET | `/history` | — | Full event log |
+| GET | `/export` | — | Download history as CSV |
+| POST | `/inject` | ✓ | Inject a fault {"fault": "crash"} |
+| POST | `/schedule` | ✓ | Start/stop scheduled injection |
+| POST | `/clear-history` | ✓ | Clear event log |
 
-Used as infrastructure: PostgreSQL, pgvector, Redis, Docker, Ollama (model serving only).
+Auth: X-API-Token header. Token set in .env.
 
 ---
 
-## Why This Project
+## ⚙️ Configuration
 
-Most observability tools are black boxes. This project is an exercise in building the full stack — from raw log ingestion to vector search to LLM reasoning — with every layer visible and modifiable. The goal was to understand how production monitoring systems actually work, not just use them.
+```env
+PORT=5000
+HOST=127.0.0.1
+API_TOKEN=changeme123
+MONITOR_INTERVAL=1
+SCHEDULER_MIN_INTERVAL=5
+```
+
+---
+
+## 🔗 Related Projects
+
+**[LOG.INTEL](https://github.com/DonaRashmitha-dev/log-intelligence-platform)** — This system is the data source for LOG.INTEL, an AI-powered log intelligence platform. Fault events generated here are ingested by LOG.INTEL, which detects anomalies statistically and answers questions about system health in plain English.
+
+---
+
+## 🛠️ Tech Stack
+
+`Python 3.11` · `Flask` · `psutil` · `threading` · `multiprocessing` · `Docker`
