@@ -1,25 +1,48 @@
-# Fault Injection System
+# Fault Injection & Self-Healing System
 
 A real-time fault injection and monitoring dashboard built with Python and Flask. Inject faults into a running system process, watch live metrics, track recovery time, and export history — all from a browser UI.
 
 ---
 
+## Why This Project
+
+Real systems fail. Most developers never simulate failure intentionally — they wait for production to break. This project creates a controlled environment to inject crashes, memory spikes, and delays, then measures how fast the system recovers. The same patterns power Netflix Chaos Monkey and Google's DiRT testing.
+
+---
+
+## Architecture
+
+```
+         target_system.py
+               │
+               ▼
+    supervisor.py ──► metrics.py ──► api.py (Flask)
+          │                               │
+    fault_injector.py              static/index.html (Dashboard UI)
+          │
+    monitor.py (psutil)
+```
+
+**Data flow:** `target_system` runs as a child process. `supervisor` watches it — on crash, restarts and records MTTR. `fault_injector` terminates / stalls / spikes the target on demand. `monitor` polls CPU + memory every second. All state flows into `metrics`, served by Flask to the dashboard.
+
+---
+
 ## Features
 
-- **Live Metrics** — CPU, memory, crash count, recovery count, and MTTR updated every second
+- **Live Metrics** — CPU, memory, crash count, recovery count, MTTR updated every second
 - **Fault Injection** — Manually trigger crash, delay, memory spike, or random faults
-- **MTTR Tracking** — Automatically measures Mean Time To Recovery after each crash
+- **MTTR Tracking** — Measures last, average, and minimum Mean Time To Recovery
 - **Fault Scheduling** — Auto-inject faults on a timer (e.g. crash every 30s)
-- **Event History** — Log of every injected fault with timestamps and outcomes
-- **Export CSV** — Download full fault history as a `.csv` file
-- **Process Supervision** — Crashed processes are automatically detected and restarted
+- **Event History** — Timestamped log of every injected fault with outcomes
+- **Export CSV** — Download full fault history as `.csv`
+- **Process Supervision** — Crashed processes auto-detected and restarted
 
 ---
 
 ## Tech Stack
 
-- **Backend** — Python, Flask, Flask-CORS
-- **Frontend** — Vanilla HTML/CSS/JS (single file, no framework)
+- **Backend** — Python 3.8+, Flask, Flask-CORS
+- **Frontend** — Vanilla HTML/CSS/JS (no framework)
 - **Process Management** — `multiprocessing`, `threading`
 - **Monitoring** — `psutil`
 
@@ -28,15 +51,18 @@ A real-time fault injection and monitoring dashboard built with Python and Flask
 ## Project Structure
 
 ```
-fault_injection_final/
+fault-injection-system/
 ├── main.py              # Entry point — starts all threads and processes
-├── api.py               # Flask REST API
-├── supervisor.py        # Watches the target process, restarts on crash, tracks MTTR
-├── fault_injector.py    # Applies the active fault to the target process
-├── monitor.py           # Polls CPU and memory via psutil
-├── metrics.py           # Shared metrics state (crashes, recoveries, history)
-├── logger.py            # Event logging
-├── target_system.py     # The system being monitored/injected
+├── api.py               # Flask REST API (full routes + validation)
+├── supervisor.py        # Watches target process, restarts on crash, tracks MTTR
+├── fault_injector.py    # Applies faults — crash/delay/memory, all non-blocking
+├── monitor.py           # Polls CPU and memory via psutil every second
+├── metrics.py           # Shared state: counters, history, MTTR stats
+├── logger.py            # Thread-safe JSON line logging with 5MB rotation
+├── target_system.py     # Simulated workload (the process being injected)
+├── requirements.txt
+├── tests/
+│   └── test_all.py      # pytest suite covering all modules
 └── static/
     └── index.html       # Dashboard UI
 ```
@@ -50,10 +76,10 @@ fault_injection_final/
 - Python 3.8+
 - pip
 
-### Install dependencies
+### Install
 
 ```bash
-pip install flask flask-cors psutil
+pip install -r requirements.txt
 ```
 
 ### Run
@@ -62,26 +88,29 @@ pip install flask flask-cors psutil
 python main.py
 ```
 
-Then open your browser at:
+Open: `http://127.0.0.1:5000`
 
-```
-http://127.0.0.1:5000
+### Run tests
+
+```bash
+pytest tests/ -v
 ```
 
 ---
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Dashboard UI |
-| GET | `/metrics` | Current CPU, memory, crash/recovery counts |
-| POST | `/inject` | Inject a fault `{ "fault": "crash" }` |
-| GET | `/history` | Full event history |
-| POST | `/clear-history` | Clear event history |
-| GET | `/status` | Process status + MTTR data |
-| POST | `/schedule` | Start/stop fault scheduler |
-| GET | `/schedule/status` | Current scheduler state |
+| Method | Endpoint           | Description                                    |
+| ------ | ------------------ | ---------------------------------------------- |
+| GET    | `/`                | Dashboard UI                                   |
+| GET    | `/metrics`         | CPU, memory, crash/recovery counts, MTTR stats |
+| POST   | `/inject`          | Inject a fault `{ "fault": "crash" }`          |
+| GET    | `/history`         | Full event history                             |
+| POST   | `/clear-history`   | Clear event history                            |
+| GET    | `/export`          | Download fault history as CSV                  |
+| GET    | `/status`          | Process status + MTTR                          |
+| POST   | `/schedule`        | Start/stop fault scheduler                     |
+| GET    | `/schedule/status` | Current scheduler state                        |
 
 ### Fault types
 
@@ -91,36 +120,50 @@ http://127.0.0.1:5000
 
 ## Fault Scheduling
 
-Use the scheduling panel on the dashboard to auto-inject faults at a fixed interval.
-
-- Pick a fault type
-- Set interval in seconds (minimum 5s)
-- Hit **START** — the scheduler fires in the background
-- Hit **STOP** to cancel
-
-Useful for demos and stress testing.
+- Pick fault type + interval in seconds (minimum 5s)
+- POST `{ "action": "start", "fault": "crash", "interval": 30 }` to `/schedule`
+- POST `{ "action": "stop" }` to stop
 
 ---
 
 ## MTTR
 
-Mean Time To Recovery is measured automatically. When the supervisor detects a crash, it records the timestamp, restarts the process, then records the recovery timestamp. The difference is shown on the dashboard as **MTTR (last recovery in seconds)**.
+After each crash the supervisor records how long restart took. Three values exposed on `/metrics`:
+
+| Field       | Meaning                        |
+| ----------- | ------------------------------ |
+| `last_mttr` | Most recent recovery time (s)  |
+| `avg_mttr`  | Average across all recoveries  |
+| `min_mttr`  | Fastest recovery observed      |
 
 ---
 
-## Export
+## Observed Metrics (Sample Run)
 
-Click **export csv** next to the history table to download `fault_history.csv` with columns:
+Results from a 5-minute scheduled chaos run (crash fault every 30s):
 
-```
-timestamp, fault_type, outcome
-```
+| Metric              | Value       |
+| ------------------- | ----------- |
+| Faults injected     | 12          |
+| Average MTTR        | 1.3 seconds |
+| Fastest recovery    | 0.8 seconds |
+| Crash survival rate | 100%        |
+
+> Replace with real values after running. Use `GET /export` to download raw data.
+
+---
+
+## Connected Projects
+
+This fault injector is the data source for **LOG.INTEL** — an AI-powered log intelligence platform that ingests these fault events, detects anomalies statistically, and answers questions about system health in plain English.
+
+> Fault Injection System generates the chaos → LOG.INTEL interprets it.
 
 ---
 
 ## Screenshots
 
-![Dashboard](assets/dashboard.png)
+[![Dashboard](https://github.com/DonaRashmitha-dev/Fault-injection-system/raw/main/assets/dashboard.png)](https://github.com/DonaRashmitha-dev/Fault-injection-system/blob/main/assets/dashboard.png)
 
 ---
 

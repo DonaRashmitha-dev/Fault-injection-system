@@ -1,757 +1,306 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fault Injection System</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Fault Injection Dashboard</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #0a0a0b;
-    --bg2: #111114;
-    --bg3: #18181d;
-    --border: rgba(255,255,255,0.07);
-    --border2: rgba(255,255,255,0.13);
-    --text: #e8e8e8;
-    --text2: #888;
-    --text3: #555;
-    --green: #22c55e;
-    --green-dim: rgba(34,197,94,0.15);
-    --red: #ef4444;
-    --red-dim: rgba(239,68,68,0.15);
-    --amber: #f59e0b;
-    --amber-dim: rgba(245,158,11,0.15);
-    --blue: #3b82f6;
-    --blue-dim: rgba(59,130,246,0.12);
-    --accent: #a78bfa;
-    --accent-dim: rgba(167,139,250,0.12);
-    --mono: 'JetBrains Mono', monospace;
-    --display: 'Syne', sans-serif;
+    --bg: #0a0a0f; --panel: #12121a; --border: #1e1e2e;
+    --text: #cdd6f4; --sub: #6c7086; --red: #f38ba8;
+    --yellow: #f9e2af; --green: #a6e3a1; --blue: #89b4fa;
+    --purple: #cba6f7; --cyan: #89dceb; --orange: #fab387;
   }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', monospace; padding: 20px; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; color: var(--blue); }
+  .sub { color: var(--sub); font-size: 0.8rem; margin-bottom: 20px; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 13px;
-    min-height: 100vh;
-    line-height: 1.5;
-  }
+  /* Auth bar */
+  .auth-bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .auth-bar input { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 10px; border-radius: 6px; font-size: 0.8rem; flex: 1; max-width: 320px; }
+  .auth-bar label { color: var(--sub); font-size: 0.8rem; }
+  .auth-status { font-size: 0.75rem; padding: 3px 8px; border-radius: 4px; }
+  .auth-status.ok  { background: #1a2e1a; color: var(--green); }
+  .auth-status.bad { background: #2e1a1a; color: var(--red); }
 
-  /* scanline overlay */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
-    pointer-events: none;
-    z-index: 999;
-  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card-label { font-size: 0.7rem; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; }
+  .card-val { font-size: 1.8rem; font-weight: bold; margin-top: 4px; }
+  .card-val.red { color: var(--red); } .card-val.green { color: var(--green); }
+  .card-val.blue { color: var(--blue); } .card-val.yellow { color: var(--yellow); }
 
-  header {
-    border-bottom: 1px solid var(--border);
-    padding: 18px 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg2);
-  }
+  .section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .section-title { font-size: 0.75rem; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
 
-  .logo {
-    font-family: var(--display);
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: -0.5px;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
+  .fault-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fault-btn { background: transparent; border: 1px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 0.85rem; transition: all .15s; }
+  .fault-btn:hover { border-color: var(--blue); color: var(--blue); background: #0a1a2e; }
+  .fault-btn.crash:hover   { border-color: var(--red);    color: var(--red);    background: #2e0a0a; }
+  .fault-btn.memory:hover  { border-color: var(--purple); color: var(--purple); background: #1a0a2e; }
+  .fault-btn.cpu_spike:hover     { border-color: var(--orange); color: var(--orange); background: #2e1a0a; }
+  .fault-btn.network_block:hover { border-color: var(--blue);   color: var(--blue);   background: #0a0a2e; }
+  .fault-btn.disk_flood:hover    { border-color: var(--cyan);   color: var(--cyan);   background: #001a1a; }
+  .fault-btn.random:hover  { border-color: var(--yellow); color: var(--yellow); background: #2e2a0a; }
 
-  .logo-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--red);
-    animation: pulse 2s infinite;
-  }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  canvas { width: 100%; height: 80px; display: block; }
 
-  .logo-dot.alive {
-    background: var(--green);
-  }
+  .sched { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input[type=number] { background: var(--panel); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; }
+  .btn { padding: 7px 18px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+  .btn.green { background: var(--green); color: #000; }
+  .btn.red   { background: var(--red);   color: #000; }
+  .sched-status { font-size: 0.8rem; color: var(--sub); }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  th { color: var(--sub); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-weight: 400; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #0e0e18; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; }
+  .badge.crash         { background: #2e0a0a; color: var(--red); }
+  .badge.memory        { background: #1a0a2e; color: var(--purple); }
+  .badge.delay         { background: #2e2a0a; color: var(--yellow); }
+  .badge.cpu_spike     { background: #2e1a0a; color: var(--orange); }
+  .badge.network_block { background: #0a0a2e; color: var(--blue); }
+  .badge.disk_flood    { background: #001a1a; color: var(--cyan); }
+  .badge.random        { background: #1a1a0a; color: var(--yellow); }
+  .badge.ok   { background: #0a2e0a; color: var(--green); }
+  .badge.err  { background: #2e0a0a; color: var(--red); }
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    font-size: 12px;
-    color: var(--text2);
-  }
-
-  .status-pill {
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    border: 1px solid;
-  }
-
-  .status-pill.alive {
-    background: var(--green-dim);
-    border-color: rgba(34,197,94,0.3);
-    color: var(--green);
-  }
-
-  .status-pill.dead {
-    background: var(--red-dim);
-    border-color: rgba(239,68,68,0.3);
-    color: var(--red);
-  }
-
-  main {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 28px 32px;
-    display: grid;
-    gap: 20px;
-  }
-
-  /* Grid layouts */
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-
-  /* Cards */
-  .card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-  }
-
-  .card-label {
-    font-size: 11px;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 8px;
-  }
-
-  .card-value {
-    font-size: 32px;
-    font-weight: 600;
-    font-family: var(--display);
-    line-height: 1;
-  }
-
-  .card-sub {
-    font-size: 11px;
-    color: var(--text2);
-    margin-top: 6px;
-  }
-
-  .metric-card { border-left: 2px solid var(--border2); }
-  .metric-card.fault { border-left-color: var(--red); }
-  .metric-card.crash { border-left-color: var(--amber); }
-  .metric-card.recovery { border-left-color: var(--green); }
-  .metric-card.cpu { border-left-color: var(--blue); }
-
-  /* Section header */
-  .section-header {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .section-header::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  /* Gauges */
-  .gauge-row {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .gauge-item { display: flex; flex-direction: column; gap: 5px; }
-
-  .gauge-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-
-  .gauge-name { font-size: 12px; color: var(--text2); }
-
-  .gauge-val {
-    font-size: 18px;
-    font-weight: 600;
-    font-family: var(--display);
-  }
-
-  .gauge-track {
-    height: 4px;
-    background: var(--bg3);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .gauge-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.6s ease;
-  }
-
-  .gauge-fill.cpu { background: var(--blue); }
-  .gauge-fill.mem { background: var(--accent); }
-
-  /* Fault buttons */
-  .fault-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
-
-  .fault-btn {
-    padding: 16px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border2);
-    background: var(--bg3);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.15s;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .fault-btn:hover { background: var(--bg2); border-color: var(--border2); transform: translateY(-1px); }
-  .fault-btn:active { transform: translateY(0); }
-
-  .fault-btn.crash-btn:hover { border-color: rgba(239,68,68,0.5); color: var(--red); }
-  .fault-btn.delay-btn:hover { border-color: rgba(245,158,11,0.5); color: var(--amber); }
-  .fault-btn.memory-btn:hover { border-color: rgba(167,139,250,0.5); color: var(--accent); }
-  .fault-btn.random-btn:hover { border-color: rgba(59,130,246,0.5); color: var(--blue); }
-  .fault-btn.none-btn:hover { border-color: rgba(34,197,94,0.5); color: var(--green); }
-
-  .btn-icon { font-size: 18px; margin-bottom: 2px; }
-  .btn-desc { font-size: 10px; color: var(--text3); font-weight: 400; }
-
-  /* Result toast */
-  #inject-result {
-    margin-top: 12px;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    border: 1px solid var(--border);
-    background: var(--bg3);
-    color: var(--text2);
-    min-height: 38px;
-    transition: all 0.2s;
-  }
-
-  #inject-result.ok { border-color: rgba(34,197,94,0.3); color: var(--green); background: var(--green-dim); }
-  #inject-result.err { border-color: rgba(239,68,68,0.3); color: var(--red); background: var(--red-dim); }
-
-  /* History table */
-  .history-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-
-  .history-table th {
-    text-align: left;
-    padding: 8px 10px;
-    color: var(--text3);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid var(--border);
-    font-weight: 400;
-  }
-
-  .history-table td {
-    padding: 9px 10px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text2);
-    font-size: 12px;
-  }
-
-  .history-table tr:last-child td { border-bottom: none; }
-  .history-table tr:hover td { background: var(--bg3); color: var(--text); }
-
-  .fault-tag {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-  }
-
-  .tag-crash { background: var(--red-dim); color: var(--red); }
-  .tag-delay { background: var(--amber-dim); color: var(--amber); }
-  .tag-memory { background: var(--accent-dim); color: var(--accent); }
-  .tag-random { background: var(--blue-dim); color: var(--blue); }
-  .tag-none { background: rgba(255,255,255,0.05); color: var(--text3); }
-
-  .outcome-ok { color: var(--green); }
-  .outcome-warn { color: var(--amber); }
-  .outcome-err { color: var(--red); }
-
-  /* Active fault indicator */
-  .active-fault {
-    padding: 12px 16px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg3);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .active-fault-label { font-size: 11px; color: var(--text3); }
-  .active-fault-val { font-size: 13px; font-weight: 600; color: var(--text); }
-
-  /* Uptime */
-  #uptime-val { font-family: var(--mono); font-size: 13px; color: var(--text2); }
-
-  /* Empty state */
-  .empty-state {
-    text-align: center;
-    padding: 28px;
-    color: var(--text3);
-    font-size: 12px;
-  }
-
-  /* Timestamp */
-  .ts { font-size: 11px; color: var(--text3); }
-
-  @media (max-width: 800px) {
-    .grid-4 { grid-template-columns: repeat(2, 1fr); }
-    .grid-2 { grid-template-columns: 1fr; }
-    main { padding: 16px; }
-  }
-  </style>
+  .hist-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px;
+    font-size: 0.82rem; display: none; z-index: 99; }
+  .toast.show { display: block; }
+  .toast.err { border-color: var(--red); color: var(--red); }
+  .process-pill { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; margin-left: 10px; }
+  .process-pill.alive { background: #0a2e0a; color: var(--green); }
+  .process-pill.dead  { background: #2e0a0a; color: var(--red); }
+</style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <div class="logo-dot" id="status-dot"></div>
-    FAULT.INJECT
+<h1>⚡ Fault Injection System <span id="process-pill" class="process-pill alive">● ALIVE</span></h1>
+<div class="sub">Chaos engineering dashboard — inject faults, measure recovery</div>
+
+<!-- Auth -->
+<div class="auth-bar">
+  <label>API Token:</label>
+  <input type="password" id="api-token" placeholder="Enter API token from .env" oninput="saveToken()"/>
+  <span id="auth-status" class="auth-status bad">Not set</span>
+</div>
+
+<!-- Metrics -->
+<div class="grid">
+  <div class="card"><div class="card-label">Total Faults</div><div class="card-val blue" id="m-faults">0</div></div>
+  <div class="card"><div class="card-label">Crashes</div><div class="card-val red" id="m-crashes">0</div></div>
+  <div class="card"><div class="card-label">Recoveries</div><div class="card-val green" id="m-recoveries">0</div></div>
+  <div class="card"><div class="card-label">Last MTTR</div><div class="card-val yellow" id="m-mttr">—</div></div>
+  <div class="card"><div class="card-label">Avg MTTR</div><div class="card-val yellow" id="m-avg-mttr">—</div></div>
+  <div class="card"><div class="card-label">Min MTTR</div><div class="card-val green" id="m-min-mttr">—</div></div>
+</div>
+
+<!-- Charts -->
+<div class="charts">
+  <div class="section">
+    <div class="section-title">CPU %</div>
+    <canvas id="cpu-chart"></canvas>
   </div>
-  <div class="header-right">
-    <span id="uptime-val">--:--:--</span>
-    <span class="status-pill dead" id="status-pill">OFFLINE</span>
+  <div class="section">
+    <div class="section-title">Memory %</div>
+    <canvas id="mem-chart"></canvas>
   </div>
-</header>
+</div>
 
-<main>
-
-  <!-- Metrics Row -->
-  <div>
-    <div class="section-header">system metrics</div>
-    <div class="grid-4" style="grid-template-columns:repeat(5,1fr)">
-      <div class="card metric-card fault">
-        <div class="card-label">Total Faults</div>
-        <div class="card-value" id="m-total">0</div>
-        <div class="card-sub">injected</div>
-      </div>
-      <div class="card metric-card crash">
-        <div class="card-label">Crashes</div>
-        <div class="card-value" id="m-crashes">0</div>
-        <div class="card-sub">detected</div>
-      </div>
-      <div class="card metric-card recovery">
-        <div class="card-label">Recoveries</div>
-        <div class="card-value" id="m-recoveries">0</div>
-        <div class="card-sub">completed</div>
-      </div>
-      <div class="card metric-card cpu">
-        <div class="card-label">CPU</div>
-        <div class="card-value" id="m-cpu">0%</div>
-        <div class="card-sub" id="m-mem-sub">mem: 0%</div>
-      </div>
-      <div class="card metric-card" style="border-left-color:var(--accent)">
-        <div class="card-label">MTTR</div>
-        <div class="card-value" id="m-mttr">--</div>
-        <div class="card-sub">last recovery (s)</div>
-      </div>
-    </div>
+<!-- Fault Buttons -->
+<div class="section">
+  <div class="section-title">Inject Fault</div>
+  <div class="fault-grid">
+    <button class="fault-btn crash"         onclick="inject('crash')">💥 Crash</button>
+    <button class="fault-btn delay"         onclick="inject('delay')">⏱ Delay</button>
+    <button class="fault-btn memory"        onclick="inject('memory')">🧠 Memory</button>
+    <button class="fault-btn cpu_spike"     onclick="inject('cpu_spike')">🔥 CPU Spike</button>
+    <button class="fault-btn network_block" onclick="inject('network_block')">🌐 Network Block</button>
+    <button class="fault-btn disk_flood"    onclick="inject('disk_flood')">💾 Disk Flood</button>
+    <button class="fault-btn random"        onclick="inject('random')">🎲 Random</button>
   </div>
+</div>
 
-  <!-- Main 2-col -->
-  <div class="grid-2">
-
-    <!-- Left: System + Gauges -->
-    <div style="display:flex;flex-direction:column;gap:20px;">
-
-      <!-- CPU / Memory gauges -->
-      <div class="card">
-        <div class="section-header">resource usage</div>
-        <div class="gauge-row">
-          <div class="gauge-item">
-            <div class="gauge-header">
-              <span class="gauge-name">CPU</span>
-              <span class="gauge-val" id="g-cpu">0%</span>
-            </div>
-            <div class="gauge-track"><div class="gauge-fill cpu" id="bar-cpu" style="width:0%"></div></div>
-          </div>
-          <div class="gauge-item">
-            <div class="gauge-header">
-              <span class="gauge-name">Memory</span>
-              <span class="gauge-val" id="g-mem">0%</span>
-            </div>
-            <div class="gauge-track"><div class="gauge-fill mem" id="bar-mem" style="width:0%"></div></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Status -->
-      <div class="card">
-        <div class="section-header">process status</div>
-        <div class="active-fault">
-          <span class="active-fault-label">active fault</span>
-          <span class="active-fault-val" id="active-fault">none</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--text3);font-size:12px">process alive</span>
-          <span id="alive-indicator" style="font-size:12px;color:var(--text3)">unknown</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
-          <span style="color:var(--text3);font-size:12px">last updated</span>
-          <span id="last-updated" class="ts">--</span>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Right: Inject controls -->
-    <div class="card">
-      <div class="section-header">fault injection</div>
-
-      <div class="fault-grid">
-        <button class="fault-btn crash-btn" onclick="inject('crash')">
-          <span class="btn-icon">💥</span>
-          CRASH
-          <span class="btn-desc">Terminates process</span>
-        </button>
-        <button class="fault-btn delay-btn" onclick="inject('delay')">
-          <span class="btn-icon">⏱</span>
-          DELAY
-          <span class="btn-desc">10s sleep injection</span>
-        </button>
-        <button class="fault-btn memory-btn" onclick="inject('memory')">
-          <span class="btn-icon">🧠</span>
-          MEMORY
-          <span class="btn-desc">200MB spike</span>
-        </button>
-        <button class="fault-btn random-btn" onclick="inject('random')">
-          <span class="btn-icon">🎲</span>
-          RANDOM
-          <span class="btn-desc">Picks random fault</span>
-        </button>
-      </div>
-
-      <div style="margin-top:10px">
-        <button class="fault-btn none-btn" onclick="inject('none')" style="width:100%;flex-direction:row;align-items:center;gap:8px">
-          <span>✓</span> CLEAR FAULT
-          <span class="btn-desc" style="margin-left:auto">reset to none</span>
-        </button>
-      </div>
-
-      <div id="inject-result">waiting for injection command...</div>
-    </div>
-
+<!-- Scheduler -->
+<div class="section">
+  <div class="section-title">Scheduler</div>
+  <div class="sched">
+    <select id="sched-fault">
+      <option value="random">random</option>
+      <option value="crash">crash</option>
+      <option value="delay">delay</option>
+      <option value="memory">memory</option>
+      <option value="cpu_spike">cpu_spike</option>
+      <option value="network_block">network_block</option>
+      <option value="disk_flood">disk_flood</option>
+    </select>
+    <input type="number" id="sched-interval" value="30" min="5" style="width:80px"/> seconds
+    <button class="btn green" onclick="schedStart()">▶ Start</button>
+    <button class="btn red"   onclick="schedStop()">■ Stop</button>
+    <span class="sched-status" id="sched-status">Scheduler off</span>
   </div>
+</div>
 
-  <!-- History -->
-  <!-- History -->
-  <div class="card">
-    <div class="section-header" style="justify-content:space-between">
-      injection history
-      <button onclick="clearHistory()" style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);cursor:pointer;letter-spacing:0.5px;text-transform:uppercase">clear</button>
-      <button onclick="exportCSV()" style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;margin-left:6px">export csv</button>
-    </div>
-    <div id="history-container">
-      <div class="empty-state">no events recorded yet</div>
-    </div>
+<!-- History -->
+<div class="section">
+  <div class="section-title">Event History</div>
+  <div class="hist-controls">
+    <button class="btn" style="background:var(--blue);color:#000" onclick="exportCSV()">↓ Export CSV</button>
+    <button class="btn" style="background:var(--border);color:var(--text)" onclick="clearHistory()">✕ Clear</button>
   </div>
+  <table>
+    <thead><tr><th>Timestamp</th><th>Fault Type</th><th>Outcome</th></tr></thead>
+    <tbody id="history-body"></tbody>
+  </table>
+</div>
 
-  <!-- Scheduler -->
-  <div class="card">
-    <div class="section-header">fault scheduling</div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">fault type</span>
-        <select id="sched-fault" style="font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text)">
-          <option value="random">random</option>
-          <option value="crash">crash</option>
-          <option value="delay">delay</option>
-          <option value="memory">memory</option>
-        </select>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">interval (seconds)</span>
-        <input id="sched-interval" type="number" value="30" min="5" style="font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:4px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);width:100px">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px;margin-top:18px">
-        <button id="sched-btn" onclick="toggleSchedule()" style="font-family:var(--mono);font-size:11px;padding:7px 16px;border-radius:4px;border:1px solid rgba(34,197,94,0.4);background:var(--green-dim);color:var(--green);cursor:pointer;font-weight:600;letter-spacing:0.5px">START</button>
-      </div>
-      <div style="margin-top:18px;font-size:12px;color:var(--text3)" id="sched-status">scheduler off</div>
-    </div>
-  </div>
-
-</main>
+<div class="toast" id="toast"></div>
 
 <script>
-  const API = '';
+const CPU_DATA = [], MEM_DATA = [], MAX_PTS = 60;
 
-  let startedAt = null;
-  let uptimeInterval = null;
+function getToken() { return document.getElementById('api-token').value.trim(); }
+function saveToken() {
+  const t = getToken();
+  const el = document.getElementById('auth-status');
+  if (t) { el.textContent = 'Set ✓'; el.className = 'auth-status ok'; }
+  else    { el.textContent = 'Not set'; el.className = 'auth-status bad'; }
+}
 
-  function fmt(n) { return String(n).padStart(2, '0'); }
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (err ? ' err' : '');
+  setTimeout(() => el.className = 'toast', 2500);
+}
 
-  function updateUptime() {
-    if (!startedAt) return;
-    const diff = Math.floor((Date.now() - startedAt) / 1000);
-    const h = Math.floor(diff / 3600);
-    const m = Math.floor((diff % 3600) / 60);
-    const s = diff % 60;
-    document.getElementById('uptime-val').textContent = `${fmt(h)}:${fmt(m)}:${fmt(s)}`;
-  }
+async function inject(fault) {
+  const token = getToken();
+  if (!token) { toast('Set API token first', true); return; }
+  const r = await fetch('/inject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Token': token },
+    body: JSON.stringify({ fault })
+  });
+  const d = await r.json();
+  if (r.ok) toast(`✓ Injected: ${fault}`);
+  else toast(d.error || 'Error', true);
+}
 
-  function faultTag(type) {
-    const cls = ['crash','delay','memory','random','none'].includes(type) ? type : 'none';
-    return `<span class="fault-tag tag-${cls}">${type}</span>`;
-  }
+async function schedStart() {
+  const token = getToken();
+  if (!token) { toast('Set API token first', true); return; }
+  const fault    = document.getElementById('sched-fault').value;
+  const interval = parseInt(document.getElementById('sched-interval').value);
+  const r = await fetch('/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Token': token },
+    body: JSON.stringify({ action: 'start', fault, interval })
+  });
+  const d = await r.json();
+  if (r.ok) toast(`Scheduler started — ${fault} every ${interval}s`);
+  else toast(d.error || 'Error', true);
+}
 
-  function outcomeClass(outcome) {
-    if (!outcome || outcome === 'none') return 'outcome-warn';
-    if (['terminated','memory_spike','delayed'].includes(outcome)) return 'outcome-ok';
-    if (outcome.startsWith('skipped')) return 'outcome-warn';
-    return 'outcome-err';
-  }
+async function schedStop() {
+  const token = getToken();
+  if (!token) { toast('Set API token first', true); return; }
+  await fetch('/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Token': token },
+    body: JSON.stringify({ action: 'stop' })
+  });
+  toast('Scheduler stopped');
+}
 
-  function formatTs(iso) {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString();
-    } catch { return iso; }
-  }
-
-  async function fetchMetrics() {
-    try {
-      const r = await fetch(`${API}/metrics`);
-      if (!r.ok) return;
-      const d = await r.json();
-
-      document.getElementById('m-total').textContent = d.total_faults ?? 0;
-      document.getElementById('m-crashes').textContent = d.crashes ?? 0;
-      document.getElementById('m-recoveries').textContent = d.recoveries ?? 0;
-
-      const cpu = parseFloat(d.cpu ?? 0).toFixed(1);
-      const mem = parseFloat(d.memory ?? 0).toFixed(1);
-
-      document.getElementById('m-cpu').textContent = `${cpu}%`;
-      document.getElementById('m-mem-sub').textContent = `mem: ${mem}%`;
-      document.getElementById('g-cpu').textContent = `${cpu}%`;
-      document.getElementById('g-mem').textContent = `${mem}%`;
-      document.getElementById('bar-cpu').style.width = `${Math.min(cpu, 100)}%`;
-      document.getElementById('bar-mem').style.width = `${Math.min(mem, 100)}%`;
-      document.getElementById('last-updated').textContent = d.timestamp ? formatTs(d.timestamp) : '--';
-    } catch (e) {
-      console.warn('metrics fetch failed', e);
-    }
-  }
-
-  async function fetchStatus() {
-    try {
-      const r = await fetch(`${API}/status`);
-      if (!r.ok) return;
-      const d = await r.json();
-
-      const alive = d.alive === true || d.alive === 'true';
-      const dot = document.getElementById('status-dot');
-      const pill = document.getElementById('status-pill');
-      const indicator = document.getElementById('alive-indicator');
-
-      dot.className = `logo-dot ${alive ? 'alive' : ''}`;
-      pill.className = `status-pill ${alive ? 'alive' : 'dead'}`;
-      pill.textContent = alive ? 'RUNNING' : 'OFFLINE';
-      indicator.textContent = alive ? '● alive' : '○ dead';
-      indicator.style.color = alive ? 'var(--green)' : 'var(--red)';
-
-      document.getElementById('active-fault').textContent = d.type || 'none';
-      if (d.mttr_last !== undefined) {
-        document.getElementById('m-mttr').textContent = d.mttr_last + 's';
-      }
-
-      if (d.started_at && !startedAt) {
-        startedAt = new Date(d.started_at).getTime();
-        if (!uptimeInterval) uptimeInterval = setInterval(updateUptime, 1000);
-        updateUptime();
-      }
-    } catch (e) {
-      console.warn('status fetch failed', e);
-    }
-  }
-
-  async function fetchHistory() {
-    try {
-      const r = await fetch(`${API}/history`);
-      if (!r.ok) return;
-      const events = await r.json();
-
-      const container = document.getElementById('history-container');
-      if (!events || events.length === 0) {
-        container.innerHTML = '<div class="empty-state">no events recorded yet</div>';
-        return;
-      }
-
-      const recent = [...events].reverse().slice(0, 15);
-      container.innerHTML = `
-        <table class="history-table">
-          <thead>
-            <tr>
-              <th>time</th>
-              <th>fault type</th>
-              <th>outcome</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${recent.map(e => `
-              <tr>
-                <td class="ts">${formatTs(e.timestamp)}</td>
-                <td>${faultTag(e.fault_type)}</td>
-                <td class="${outcomeClass(e.outcome)}">${e.outcome || 'none'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-    } catch (e) {
-      console.warn('history fetch failed', e);
-    }
-  }
-
-  async function inject(faultType) {
-    const result = document.getElementById('inject-result');
-    result.className = '';
-    result.textContent = `sending ${faultType}...`;
-
-    try {
-      const r = await fetch(`${API}/inject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fault: faultType }),
-      });
-      const d = await r.json();
-
-      if (r.ok) {
-        result.className = 'ok';
-        result.textContent = `✓ injected: ${d.fault}`;
-        setTimeout(fetchStatus, 300);
-        setTimeout(fetchHistory, 1000);
-      } else {
-        result.className = 'err';
-        result.textContent = `✗ ${d.error || 'injection failed'}`;
-      }
-    } catch (e) {
-      result.className = 'err';
-      result.textContent = `✗ connection error — is the server running?`;
-    }
-  }
-
-  async function exportCSV() {
-    const r = await fetch(`${API}/history`);
-    const events = await r.json();
-    if (!events || events.length === 0) { alert('No history to export.'); return; }
-    const rows = [['timestamp','fault_type','outcome']];
-    events.forEach(e => rows.push([e.timestamp, e.fault_type, e.outcome]));
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'fault_history.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  let schedActive = false;
-
-  async function toggleSchedule() {
-    const fault = document.getElementById('sched-fault').value;
-    const interval = parseInt(document.getElementById('sched-interval').value);
-    const btn = document.getElementById('sched-btn');
-    const status = document.getElementById('sched-status');
-
-    if (!schedActive) {
-      await fetch(`${API}/schedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', fault, interval })
-      });
-      schedActive = true;
-      btn.textContent = 'STOP';
-      btn.style.borderColor = 'rgba(239,68,68,0.4)';
-      btn.style.background = 'var(--red-dim)';
-      btn.style.color = 'var(--red)';
-      status.textContent = `firing ${fault} every ${interval}s`;
-      status.style.color = 'var(--green)';
-    } else {
-      await fetch(`${API}/schedule`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'stop' })
-      });
-      schedActive = false;
-      btn.textContent = 'START';
-      btn.style.borderColor = 'rgba(34,197,94,0.4)';
-      btn.style.background = 'var(--green-dim)';
-      btn.style.color = 'var(--green)';
-      status.textContent = 'scheduler off';
-      status.style.color = 'var(--text3)';
-    }
-  }
-
-  async function tick() {
-    await Promise.all([fetchMetrics(), fetchStatus(), fetchHistory()]);
-  }
 async function clearHistory() {
-    await fetch(`${API}/clear-history`, { method: 'POST' });
-    await fetchHistory();
-  }
-  tick();
-  setInterval(tick, 2000);
+  const token = getToken();
+  if (!token) { toast('Set API token first', true); return; }
+  await fetch('/clear-history', { method: 'POST', headers: { 'X-API-Token': token } });
+  document.getElementById('history-body').innerHTML = '';
+  toast('History cleared');
+}
+
+function exportCSV() { window.location.href = '/export'; }
+
+function drawSparkline(canvasId, data, color) {
+  const c = document.getElementById(canvasId);
+  const ctx = c.getContext('2d');
+  c.width = c.offsetWidth || 400; c.height = 80;
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (data.length < 2) return;
+  const max = 100, w = c.width, h = c.height;
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = (i / (MAX_PTS - 1)) * w;
+    const y = h - (v / max) * h;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  // fill
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+  ctx.fillStyle = color + '22'; ctx.fill();
+}
+
+async function poll() {
+  try {
+    const [mRes, sRes, hRes, schRes] = await Promise.all([
+      fetch('/metrics'), fetch('/status'), fetch('/history'), fetch('/schedule/status')
+    ]);
+    const m = await mRes.json(), s = await sRes.json(),
+          h = await hRes.json(), sch = await schRes.json();
+
+    document.getElementById('m-faults').textContent    = m.total_faults ?? 0;
+    document.getElementById('m-crashes').textContent   = m.crashes ?? 0;
+    document.getElementById('m-recoveries').textContent= m.recoveries ?? 0;
+    document.getElementById('m-mttr').textContent      = m.last_mttr != null ? m.last_mttr + 's' : '—';
+    document.getElementById('m-avg-mttr').textContent  = m.avg_mttr  != null ? m.avg_mttr  + 's' : '—';
+    document.getElementById('m-min-mttr').textContent  = m.min_mttr  != null ? m.min_mttr  + 's' : '—';
+
+    CPU_DATA.push(m.cpu ?? 0); MEM_DATA.push(m.memory ?? 0);
+    if (CPU_DATA.length > MAX_PTS) CPU_DATA.shift();
+    if (MEM_DATA.length > MAX_PTS) MEM_DATA.shift();
+    drawSparkline('cpu-chart', CPU_DATA, '#89b4fa');
+    drawSparkline('mem-chart', MEM_DATA, '#cba6f7');
+
+    const pill = document.getElementById('process-pill');
+    pill.textContent = s.alive ? '● ALIVE' : '● DEAD';
+    pill.className   = 'process-pill ' + (s.alive ? 'alive' : 'dead');
+
+    const schedStatus = document.getElementById('sched-status');
+    schedStatus.textContent = sch.active
+      ? `Scheduler on — ${sch.fault} every ${sch.interval}s`
+      : 'Scheduler off';
+
+    const tbody = document.getElementById('history-body');
+    tbody.innerHTML = [...h].reverse().slice(0, 50).map(r => `
+      <tr>
+        <td>${r.timestamp}</td>
+        <td><span class="badge ${r.fault_type}">${r.fault_type}</span></td>
+        <td><span class="badge ${r.outcome === 'terminated' ? 'err' : 'ok'}">${r.outcome}</span></td>
+      </tr>`).join('');
+  } catch(e) { /* server restarting */ }
+}
+
+// Load token from sessionStorage
+const saved = sessionStorage.getItem('api_token');
+if (saved) { document.getElementById('api-token').value = saved; saveToken(); }
+document.getElementById('api-token').addEventListener('input', () => {
+  sessionStorage.setItem('api_token', getToken());
+});
+
+poll();
+setInterval(poll, 1000);
 </script>
 </body>
 </html>
