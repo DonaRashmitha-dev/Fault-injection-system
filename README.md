@@ -1,172 +1,172 @@
-# Fault Injection & Self-Healing System
+# LOG.INTEL — Real-Time Log Intelligence Platform
 
-A real-time fault injection and monitoring dashboard built with Python and Flask. Inject faults into a running system process, watch live metrics, track recovery time, and export history — all from a browser UI.
+> Ingest system logs → detect anomalies statistically → query everything in plain English via RAG-powered AI agent.
 
 ---
 
-## Why This Project
+## What This Is
 
-Real systems fail. Most developers never simulate failure intentionally — they wait for production to break. This project creates a controlled environment to inject crashes, memory spikes, and delays, then measures how fast the system recovers. The same patterns power Netflix Chaos Monkey and Google's DiRT testing.
+A production-grade observability platform built from scratch. It continuously ingests fault-injection logs, runs EWMA-based anomaly detection, embeds log data into a vector database, and exposes a natural language query interface powered by a local LLM with retrieval-augmented generation.
+
+No cloud dependency. No managed services. Fully self-hosted.
+
+---
+
+## Screenshots
+
+### Critical Anomaly Detection
+![Critical Anomalies](screenshots/dashboardhtml_1.png)
+
+### System Health Summary
+![System Health](screenshots/dashboardhtml_2.png)
+
+### Error Query — Last 6 Hours
+![Errors Last 6 Hours](screenshots/dashboardhtml_3.png)
 
 ---
 
 ## Architecture
 
 ```
-         target_system.py
-               │
-               ▼
-    supervisor.py ──► metrics.py ──► api.py (Flask)
-          │                               │
-    fault_injector.py              static/index.html (Dashboard UI)
-          │
-    monitor.py (psutil)
+Fault Injector (Flask)
+        │
+        ▼
+Ingestion Service (FastAPI) ──► PostgreSQL + pgvector
+        │                              │
+        ▼                              ▼
+Embedding Worker              EWMA Anomaly Detector
+(nomic-embed-text)                     │
+                                       ▼
+                              Redis Alert Channel
+                                       │
+                                       ▼
+                            Agent API (FastAPI + RAG)
+                                       │
+                                       ▼
+                              Dashboard (Vanilla JS)
 ```
-
-**Data flow:** `target_system` runs as a child process. `supervisor` watches it — on crash, restarts and records MTTR. `fault_injector` terminates / stalls / spikes the target on demand. `monitor` polls CPU + memory every second. All state flows into `metrics`, served by Flask to the dashboard.
-
----
-
-## Features
-
-- **Live Metrics** — CPU, memory, crash count, recovery count, MTTR updated every second
-- **Fault Injection** — Manually trigger crash, delay, memory spike, or random faults
-- **MTTR Tracking** — Measures last, average, and minimum Mean Time To Recovery
-- **Fault Scheduling** — Auto-inject faults on a timer (e.g. crash every 30s)
-- **Event History** — Timestamped log of every injected fault with outcomes
-- **Export CSV** — Download full fault history as `.csv`
-- **Process Supervision** — Crashed processes auto-detected and restarted
 
 ---
 
 ## Tech Stack
 
-- **Backend** — Python 3.8+, Flask, Flask-CORS
-- **Frontend** — Vanilla HTML/CSS/JS (no framework)
-- **Process Management** — `multiprocessing`, `threading`
-- **Monitoring** — `psutil`
+| Layer | Technology |
+|---|---|
+| Fault Simulation | Python / Flask |
+| Ingestion API | FastAPI + asyncpg |
+| Database | PostgreSQL 16 + pgvector extension |
+| Cache / Alerts | Redis 7 |
+| Embeddings | Ollama — nomic-embed-text |
+| Anomaly Detection | EWMA (Exponentially Weighted Moving Average) |
+| AI Agent | Ollama — TinyLlama (local LLM) |
+| RAG Pipeline | Vector similarity search → LLM context injection |
+| Dashboard | Vanilla JS, HTML, CSS |
+| Containers | Docker (Postgres + Redis) |
+
+---
+
+## Key Features
+
+**Real-time ingestion** — fault simulator generates CPU/memory/crash logs every few seconds; ingestion service writes to Postgres with embeddings via pgvector.
+
+**EWMA anomaly detection** — statistical threshold model detects CPU spikes using exponentially weighted moving averages. Fires CRITICAL alerts to Redis when threshold breached. Adaptive — threshold adjusts to baseline over time.
+
+**RAG query pipeline** — natural language question → embed query → vector similarity search → top-k relevant logs injected as context → LLM generates specific answer with log IDs and timestamps.
+
+**Live dashboard** — real-time metrics (total logs, error rate, anomaly count, latest critical timestamp), filterable log stream (ALL/ERROR/WARN/INFO/DEBUG), AI query panel.
+
+---
+
+## Metrics (Live Run)
+
+| Metric | Value |
+|---|---|
+| Total logs ingested | 2,735 |
+| Error rate | 75.4% |
+| EWMA anomalies detected | 431 |
+| Latest anomaly | CPU spike 87.6% (threshold 84.3%, σ=18.60) |
+
+---
+
+## Running Locally
+
+### Prerequisites
+- Docker Desktop
+- Python 3.11+
+- Ollama
+
+### Setup
+
+```bash
+# 1. Clone
+git clone https://github.com/YOUR_USERNAME/log-intelligence-platform.git
+cd log-intelligence-platform
+
+# 2. Pull Ollama models
+ollama pull nomic-embed-text
+ollama pull tinyllama
+
+# 3. Start Postgres + Redis
+docker compose up -d
+
+# 4. Install dependencies
+pip install -r requirements.txt
+
+# 5. Start all services
+.\start.ps1          # Windows
+# or manually start each service (see below)
+```
+
+### Manual Start (4 terminals)
+
+```powershell
+# Terminal 1 — Ingestion
+$env:DATABASE_URL="postgresql://loguser:changeme_strong_password@localhost:5432/logdb"
+$env:REDIS_URL="redis://localhost:6379"
+cd services/ingestion
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+# Terminal 2 — Agent
+cd services/agent
+uvicorn agent_api:app --host 0.0.0.0 --port 8002 --reload
+
+# Terminal 3 — Dashboard
+python -m http.server 8080
+
+# Terminal 4 — Fault Injector
+cd services/fault_injector
+python app.py
+```
+
+Open http://localhost:8080/dashboard.html
 
 ---
 
 ## Project Structure
 
 ```
-fault-injection-system/
-├── main.py              # Entry point — starts all threads and processes
-├── api.py               # Flask REST API (full routes + validation)
-├── supervisor.py        # Watches target process, restarts on crash, tracks MTTR
-├── fault_injector.py    # Applies faults — crash/delay/memory, all non-blocking
-├── monitor.py           # Polls CPU and memory via psutil every second
-├── metrics.py           # Shared state: counters, history, MTTR stats
-├── logger.py            # Thread-safe JSON line logging with 5MB rotation
-├── target_system.py     # Simulated workload (the process being injected)
-├── requirements.txt
-├── tests/
-│   └── test_all.py      # pytest suite covering all modules
-└── static/
-    └── index.html       # Dashboard UI
+log-intelligence-platform/
+├── services/
+│   ├── ingestion/          # FastAPI log ingestion + embedding pipeline
+│   ├── agent/              # RAG agent API (vector search + LLM)
+│   ├── fault_injector/     # Synthetic fault log generator
+│   ├── embedding_worker/   # Async embedding processor
+│   └── ewma_detector/      # Statistical anomaly detection
+├── dashboard.html          # Live monitoring dashboard
+├── start.ps1               # One-command startup script
+└── docker-compose.yml      # Postgres + Redis containers
 ```
 
 ---
 
-## Getting Started
+## What I Built vs What I Used
 
-### Prerequisites
+Built from scratch: ingestion pipeline, EWMA detector, RAG agent, embedding worker, dashboard UI, fault simulator.
 
-- Python 3.8+
-- pip
-
-### Install
-
-```bash
-pip install -r requirements.txt
-```
-
-### Run
-
-```bash
-python main.py
-```
-
-Open: `http://127.0.0.1:5000`
-
-### Run tests
-
-```bash
-pytest tests/ -v
-```
+Used as infrastructure: PostgreSQL, pgvector, Redis, Docker, Ollama (model serving only).
 
 ---
 
-## API Endpoints
+## Why This Project
 
-| Method | Endpoint           | Description                                    |
-| ------ | ------------------ | ---------------------------------------------- |
-| GET    | `/`                | Dashboard UI                                   |
-| GET    | `/metrics`         | CPU, memory, crash/recovery counts, MTTR stats |
-| POST   | `/inject`          | Inject a fault `{ "fault": "crash" }`          |
-| GET    | `/history`         | Full event history                             |
-| POST   | `/clear-history`   | Clear event history                            |
-| GET    | `/export`          | Download fault history as CSV                  |
-| GET    | `/status`          | Process status + MTTR                          |
-| POST   | `/schedule`        | Start/stop fault scheduler                     |
-| GET    | `/schedule/status` | Current scheduler state                        |
-
-### Fault types
-
-`crash` · `delay` · `memory` · `random` · `none`
-
----
-
-## Fault Scheduling
-
-- Pick fault type + interval in seconds (minimum 5s)
-- POST `{ "action": "start", "fault": "crash", "interval": 30 }` to `/schedule`
-- POST `{ "action": "stop" }` to stop
-
----
-
-## MTTR
-
-After each crash the supervisor records how long restart took. Three values exposed on `/metrics`:
-
-| Field       | Meaning                        |
-| ----------- | ------------------------------ |
-| `last_mttr` | Most recent recovery time (s)  |
-| `avg_mttr`  | Average across all recoveries  |
-| `min_mttr`  | Fastest recovery observed      |
-
----
-
-## Observed Metrics (Sample Run)
-
-Results from a 5-minute scheduled chaos run (crash fault every 30s):
-
-| Metric              | Value       |
-| ------------------- | ----------- |
-| Faults injected     | 12          |
-| Average MTTR        | 1.3 seconds |
-| Fastest recovery    | 0.8 seconds |
-| Crash survival rate | 100%        |
-
-> Replace with real values after running. Use `GET /export` to download raw data.
-
----
-
-## Connected Projects
-
-This fault injector is the data source for **LOG.INTEL** — an AI-powered log intelligence platform that ingests these fault events, detects anomalies statistically, and answers questions about system health in plain English.
-
-> Fault Injection System generates the chaos → LOG.INTEL interprets it.
-
----
-
-## Screenshots
-
-[![Dashboard](https://github.com/DonaRashmitha-dev/Fault-injection-system/raw/main/assets/dashboard.png)](https://github.com/DonaRashmitha-dev/Fault-injection-system/blob/main/assets/dashboard.png)
-
----
-
-## License
-
-MIT
+Most observability tools are black boxes. This project is an exercise in building the full stack — from raw log ingestion to vector search to LLM reasoning — with every layer visible and modifiable. The goal was to understand how production monitoring systems actually work, not just use them.
